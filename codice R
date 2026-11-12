@@ -18,3 +18,95 @@ data <- data.frame(x_cont, x_bin, x_mult)
 
 #  -- change the number of classes in Y
 #  -- change the thresholds
+
+
+###############################################################################################################################################
+# SIMULATION FUNCTION ----
+ordinal_data <- function(
+    n = 1000,
+    K = 5,
+    p = 2,
+    beta=NULL,
+    p0 = rep(1/K, K),
+    relationship = "linear",
+    PO = TRUE
+) {
+  
+  # Generate independent predictors
+  X <- matrix(rnorm(n*p), n, p)
+  
+  # Define the relationship between predictors and outcome
+  f_X <- X
+  
+  if (relationship == "quadratic") {
+    f_X <- cbind(f_X,X[, 1]^2 - 1)
+  }
+  
+  if (relationship == "interaction") {
+    if (p < 2) stop("Interaction requires at least 2 predictors.")
+    f_X <- cbind(f_X,X[, 1] * X[, 2])
+  }
+  
+  if (relationship == "smooth") {
+    f_X<- cbind(f_X, tanh(2 * X[, 1]))
+  }
+  
+  if (!relationship %in% c("linear", "quadratic",
+                           "interaction", "smooth")) {
+    stop("Unknown relationship.")
+  }
+  
+  # Define category thresholds
+  if (length(p0) != K || any(p0 <= 0) ||
+      abs(sum(p0) - 1) > 1e-8) {
+    stop("p0 must contain K positive probabilities summing to 1.")
+  }
+  
+  thresholds <- qlogis(cumsum(p0)[-K]) # define thresholds
+  
+  # Generate ordinal labels 
+  if (PO) { # proportional odds 
+    eta <- as.vector(f_X %*% beta)
+    epsilon <-rlogis(n)
+    y_star <- eta + epsilon
+    y <- findInterval(y_star, thresholds)+1
+    
+  } else { # non-proportional odds
+    beta_cut <- matrix(
+      rep(beta, each=K-1),
+      nrow = K-1,
+      ncol=length(beta)
+    )
+    
+    beta_cut[, 1] <- beta[1]*seq(0.3, 1.0, length.out = K-1)
+    eta_matrix <- f_X %*% t(beta_cut)
+    
+    cumulative_probs <- plogis(
+      matrix(thresholds, nrow = n, ncol = K - 1, byrow = TRUE) -
+        eta_matrix
+    )
+    
+    u <- runif(n)
+    y <- vapply(seq_len(n), function(i) {
+      findInterval(u[i], c(0, cumulative_probs[i, ]))
+    }, integer(1))
+  }
+  
+  data <- as.data.frame(X)
+  data$y <- ordered(y, levels = 1:K)
+  
+  return(data)
+}
+
+# SYNTHETIC DATA ----
+## 1. Baseline scenario ----
+n=1000
+K=5
+p=2
+beta=c(0.8, 0.5)
+p0=rep(1/5,5)
+relationship="linear"
+PO=TRUE
+
+S1=ordinal_data(n,K,p,beta,p0,relationship,PO)
+
