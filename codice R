@@ -6,7 +6,7 @@ x_cont <- rnorm(1000, 0, 1)
 x_bin <- rbinom(1000, 1, 0.5)
 
 x_mult <- factor(sample(1:3, 1000, replace = TRUE,
-                       prob = c(0.3, 0.4, 0.3)))
+                        prob = c(0.3, 0.4, 0.3)))
 
 data <- data.frame(x_cont, x_bin, x_mult)
 
@@ -21,6 +21,13 @@ data <- data.frame(x_cont, x_bin, x_mult)
 
 
 ###############################################################################################################################################
+# install.packages("MASS")
+library(MASS)
+
+
+# set the seed for reproducibility
+set.seed(123)
+
 # SIMULATION FUNCTION ----
 ordinal_data <- function(
     n = 1000,
@@ -98,15 +105,380 @@ ordinal_data <- function(
   return(data)
 }
 
+
+
+
+# now instead create the function to assess performance of model
+# PERFORMANCE
+
+ordinal_metrics <- function(model, data) {
+  
+  # Predicted categories
+  y_pred <- predict(model, newdata = data, type = "class")
+  
+  # Convert observed and predicted outcomes to numeric
+  y_true_num <- as.numeric(data$y)
+  y_pred_num <- as.numeric(y_pred)
+  
+  # Misclassification Zero-One Error
+  MZE <- mean(y_true_num != y_pred_num)
+  
+  # Mean Absolute Error
+  MAE <- mean(abs(y_true_num - y_pred_num))
+  
+  return(c(MZE = MZE, MAE = MAE))
+}
+
+
+
+
 # SYNTHETIC DATA ----
-## 1. Baseline scenario ----
-n=1000
-K=5
-p=2
-beta=c(0.8, 0.5)
-p0=rep(1/5,5)
-relationship="linear"
-PO=TRUE
 
-S1=ordinal_data(n,K,p,beta,p0,relationship,PO)
+# now we generate all the different datasets that we will use to check how the model performs
 
+# we vary: 
+# - number of categories in the output variable
+# - threshold set (distance between the categories)
+
+
+# for now we keep n = sample size, p = number covariates, and beta = coefficients, FIXED
+# SYNTHETIC DATA ----
+
+# Fixed parameters
+n_train <- 8000
+n_test <- 2000
+
+p <- 2
+beta <- c(0.8, 0.5)
+relationship <- "linear"
+PO <- TRUE
+
+
+# first 3 datasets ####
+
+# start from the case where we vary the number of categories
+# Thresholds are defined such that, in the absence of predictor effects (\(\beta=0\)), 
+# all outcome categories have equal probabilities. 
+# This provides a baseline scenario with balanced outcome categories.
+
+# Number of categories
+K1_equi <- 3
+K2_equi <- 6
+K3_equi <- 10
+
+# Balanced category probabilities
+p0_1equi <- rep(1/K1_equi, K1_equi)
+p0_2equi <- rep(1/K2_equi, K2_equi)
+p0_3equi <- rep(1/K3_equi, K3_equi)
+
+
+# Generate training datasets
+D1_equi_train <- ordinal_data(n_train, K1_equi, p, beta,
+                              p0_1equi, relationship, PO)
+
+D2_equi_train <- ordinal_data(n_train, K2_equi, p, beta,
+                              p0_2equi, relationship, PO)
+
+D3_equi_train <- ordinal_data(n_train, K3_equi, p, beta,
+                              p0_3equi, relationship, PO)
+
+
+# Generate test datasets
+D1_equi_test <- ordinal_data(n_test, K1_equi, p, beta,
+                             p0_1equi, relationship, PO)
+
+D2_equi_test <- ordinal_data(n_test, K2_equi, p, beta,
+                             p0_2equi, relationship, PO)
+
+D3_equi_test <- ordinal_data(n_test, K3_equi, p, beta,
+                             p0_3equi, relationship, PO)
+
+
+
+
+
+
+
+
+#
+
+# now try to fit the model 
+
+# FIT PROPORTIONAL ODDS MODELS ----
+
+
+model_1 <- polr(
+  y ~ .,
+  data = D1_equi_train,
+  method = "logistic",
+  Hess = TRUE
+)
+
+model_2 <- polr(
+  y ~ .,
+  data = D2_equi_train,
+  method = "logistic",
+  Hess = TRUE
+)
+
+model_3 <- polr(
+  y ~ .,
+  data = D3_equi_train,
+  method = "logistic",
+  Hess = TRUE
+)
+
+
+
+# TRUE COEFFICIENTS
+beta_true <- c(0.8, 0.5)
+
+# ESTIMATED COEFFICIENTS
+beta_est <- rbind(
+  K3  = coef(model_1),
+  K6  = coef(model_2),
+  K10 = coef(model_3)
+)
+
+# COMPARISON
+comparison <- data.frame(
+  K = c(3, 6, 10),
+  beta1_est = beta_est[, 1],
+  beta1_true = beta_true[1],
+  beta2_est = beta_est[, 2],
+  beta2_true = beta_true[2]
+)
+
+comparison
+
+
+
+
+# PERFORMANCE ON TRAINING DATA ----
+
+perf_1_train <- ordinal_metrics(model_1, D1_equi_train)
+perf_2_train <- ordinal_metrics(model_2, D2_equi_train)
+perf_3_train <- ordinal_metrics(model_3, D3_equi_train)
+
+
+# PERFORMANCE ON TEST DATA ----
+
+perf_1_test <- ordinal_metrics(model_1, D1_equi_test)
+perf_2_test <- ordinal_metrics(model_2, D2_equi_test)
+perf_3_test <- ordinal_metrics(model_3, D3_equi_test)
+
+# COMBINE PERFORMANCE RESULTS ----
+
+performance <- data.frame(
+  K = rep(c(3, 6, 10), each = 2),
+  Dataset = rep(c("Training", "Test"), 3),
+  MZE = c(
+    perf_1_train["MZE"], perf_1_test["MZE"],
+    perf_2_train["MZE"], perf_2_test["MZE"],
+    perf_3_train["MZE"], perf_3_test["MZE"]
+  ),
+  MAE = c(
+    perf_1_train["MAE"], perf_1_test["MAE"],
+    perf_2_train["MAE"], perf_2_test["MAE"],
+    perf_3_train["MAE"], perf_3_test["MAE"]
+  )
+)
+
+performance
+
+
+########## IMP FROM HERE STILL DIDNT DO IT ON THE PERFORMANCE ON THE TEST SET
+
+
+
+# MIDDLE FREQUENT
+# now generate datasets where middle categories more frequent than extreme
+# define symmetric intervals
+
+# K = 3
+p0_4 <- c(0.20, 0.60, 0.20)
+
+# K = 6
+p0_5 <- c(0.05, 0.15, 0.30, 0.30, 0.15, 0.05)
+
+# K = 10
+p0_6 <- c(0.02, 0.04, 0.08, 0.14, 0.22,
+           0.22, 0.14, 0.08, 0.04, 0.02)
+
+# now generate the datasets
+D4 <- ordinal_data(n, K1, p, beta, p0 = p0_4, relationship, PO)
+D5 <- ordinal_data(n, K2, p, beta, p0 = p0_5, relationship, PO)
+D6 <- ordinal_data(n, K3, p, beta, p0 = p0_6, relationship, PO)
+
+
+# now try to fit the model 
+
+# Fit proportional odds models
+model_4 <- polr(
+  y ~ .,
+  data = D4,
+  method = "logistic",
+  Hess = TRUE
+)
+
+model_5 <- polr(
+  y ~ .,
+  data = D5,
+  method = "logistic",
+  Hess = TRUE
+)
+
+model_6 <- polr(
+  y ~ .,
+  data = D6,
+  method = "logistic",
+  Hess = TRUE
+)
+
+
+# Model summaries
+summary(model_4)
+summary(model_5)
+summary(model_6)
+
+# True coefficients
+beta_true <- c(0.8, 0.5)
+
+# Extract estimated coefficients
+beta_est <- rbind(
+  K3  = coef(model_4),
+  K6  = coef(model_5),
+  K10 = coef(model_6)
+)
+
+# Compare estimates with true values
+comparison <- data.frame(
+  K = c(3, 6, 10),
+  beta1_est = beta_est[, 1],
+  beta1_true = beta_true[1],
+  beta2_est = beta_est[, 2],
+  beta2_true = beta_true[2]
+)
+
+comparison
+
+
+# now assess performance with MZE and MAE
+
+perf_4 <- ordinal_metrics(model_4, D4)
+perf_5 <- ordinal_metrics(model_5, D5)
+perf_6 <- ordinal_metrics(model_6, D6)
+
+
+
+
+# EXTREME FREQUENT #### 
+
+
+# K = 3
+p0_7 <- c(0.40, 0.20, 0.40)
+
+# K = 6
+p0_8 <- c(0.30, 0.15, 0.05, 0.05, 0.15, 0.30)
+
+# K = 10
+p0_9 <- c(0.22, 0.14, 0.08, 0.04, 0.02,
+                   0.02, 0.04, 0.08, 0.14, 0.22)
+
+
+D7 <- ordinal_data(n, K1, p, beta, p0 = p0_7, relationship, PO)
+D8 <- ordinal_data(n, K2, p, beta, p0 = p0_8, relationship, PO)
+D9 <- ordinal_data(n, K3, p, beta, p0 = p0_9, relationship, PO)
+
+
+# now try to fit the model 
+
+# Fit proportional odds models
+model_7 <- polr(
+  y ~ .,
+  data = D7,
+  method = "logistic",
+  Hess = TRUE
+)
+
+model_8 <- polr(
+  y ~ .,
+  data = D8,
+  method = "logistic",
+  Hess = TRUE
+)
+
+model_9 <- polr(
+  y ~ .,
+  data = D9,
+  method = "logistic",
+  Hess = TRUE
+)
+
+
+# Model summaries
+summary(model_7)
+summary(model_8)
+summary(model_9)
+
+# True coefficients
+beta_true <- c(0.8, 0.5)
+
+# Extract estimated coefficients
+beta_est <- rbind(
+  K3  = coef(model_7),
+  K6  = coef(model_8),
+  K10 = coef(model_9)
+)
+
+# Compare estimates with true values
+comparison <- data.frame(
+  K = c(3, 6, 10),
+  beta1_est = beta_est[, 1],
+  beta1_true = beta_true[1],
+  beta2_est = beta_est[, 2],
+  beta2_true = beta_true[2]
+)
+
+comparison
+
+
+# now assess performance with MZE and MAE
+
+perf_7 <- ordinal_metrics(model_7, D7)
+perf_8 <- ordinal_metrics(model_8, D8)
+perf_9 <- ordinal_metrics(model_9, D9)
+
+
+rbind(perf_1, perf_2, perf_3, perf_4, perf_5, perf_6, perf_7, perf_8, perf_9)
+# results consistent also by increasing sample size (didnt write the code but tried)
+
+
+
+
+# some thinking ####
+
+# there are 2 main aspects of model performance for this case
+# 1 = how well the model predicts outcome categories
+# 2 = how well the model estimates the underlying relationship between predictors and outcome
+
+
+# for 1 we compute MAE, MZE
+# on the test set
+
+
+# for 2 we compute bias and empirical sd
+# larger bias ofc means less accurate 
+# higher sd ofc means that there is high variability in the estimates
+
+
+# so it can be of interest to see how well the model performs 
+# when the predictor effect is higher (beta larger)
+# because if the association is higher it means that it should be easier to predict 
+
+
+# important need to repetitions ??? for computing bias and sd of the beta
+
+
+# potential questions ####
+# do we need to compare to a model seen in class
