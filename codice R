@@ -287,13 +287,11 @@ performance <- data.frame(
 performance
 
 
-########## IMP FROM HERE STILL DIDNT DO IT ON THE PERFORMANCE ON THE TEST SET
 
 
+# MIDDLE CATEGORIES MORE FREQUENT ----
 
-# MIDDLE FREQUENT
-# now generate datasets where middle categories more frequent than extreme
-# define symmetric intervals
+# Define balanced-around-the-middle category probabilities
 
 # K = 3
 p0_4 <- c(0.20, 0.60, 0.20)
@@ -303,56 +301,74 @@ p0_5 <- c(0.05, 0.15, 0.30, 0.30, 0.15, 0.05)
 
 # K = 10
 p0_6 <- c(0.02, 0.04, 0.08, 0.14, 0.22,
-           0.22, 0.14, 0.08, 0.04, 0.02)
-
-# now generate the datasets
-D4 <- ordinal_data(n, K1, p, beta, p0 = p0_4, relationship, PO)
-D5 <- ordinal_data(n, K2, p, beta, p0 = p0_5, relationship, PO)
-D6 <- ordinal_data(n, K3, p, beta, p0 = p0_6, relationship, PO)
+          0.22, 0.14, 0.08, 0.04, 0.02)
 
 
-# now try to fit the model 
+# GENERATE TRAINING DATASETS
 
-# Fit proportional odds models
+D4_train <- ordinal_data(n_train, K1_equi, p, beta,
+                         p0_4, relationship, PO)
+
+D5_train <- ordinal_data(n_train, K2_equi, p, beta,
+                         p0_5, relationship, PO)
+
+D6_train <- ordinal_data(n_train, K3_equi, p, beta,
+                         p0_6, relationship, PO)
+
+
+# GENERATE TEST DATASETS
+
+D4_test <- ordinal_data(n_test, K1_equi, p, beta,
+                        p0_4, relationship, PO)
+
+D5_test <- ordinal_data(n_test, K2_equi, p, beta,
+                        p0_5, relationship, PO)
+
+D6_test <- ordinal_data(n_test, K3_equi, p, beta,
+                        p0_6, relationship, PO)
+
+
+# FIT PROPORTIONAL ODDS MODELS ----
+
 model_4 <- polr(
   y ~ .,
-  data = D4,
+  data = D4_train,
   method = "logistic",
   Hess = TRUE
 )
 
 model_5 <- polr(
   y ~ .,
-  data = D5,
+  data = D5_train,
   method = "logistic",
   Hess = TRUE
 )
 
 model_6 <- polr(
   y ~ .,
-  data = D6,
+  data = D6_train,
   method = "logistic",
   Hess = TRUE
 )
 
 
-# Model summaries
-summary(model_4)
-summary(model_5)
-summary(model_6)
+# TRUE COEFFICIENTS
 
-# True coefficients
 beta_true <- c(0.8, 0.5)
 
-# Extract estimated coefficients
+
+# ESTIMATED COEFFICIENTS
+
 beta_est <- rbind(
   K3  = coef(model_4),
   K6  = coef(model_5),
   K10 = coef(model_6)
 )
 
-# Compare estimates with true values
-comparison <- data.frame(
+
+# COMPARISON
+
+comparison_middle <- data.frame(
   K = c(3, 6, 10),
   beta1_est = beta_est[, 1],
   beta1_true = beta_true[1],
@@ -360,20 +376,47 @@ comparison <- data.frame(
   beta2_true = beta_true[2]
 )
 
-comparison
+comparison_middle
 
 
-# now assess performance with MZE and MAE
+# PERFORMANCE ON TRAINING DATA ----
 
-perf_4 <- ordinal_metrics(model_4, D4)
-perf_5 <- ordinal_metrics(model_5, D5)
-perf_6 <- ordinal_metrics(model_6, D6)
-
-
+perf_4_train <- ordinal_metrics(model_4, D4_train)
+perf_5_train <- ordinal_metrics(model_5, D5_train)
+perf_6_train <- ordinal_metrics(model_6, D6_train)
 
 
-# EXTREME FREQUENT #### 
+# PERFORMANCE ON TEST DATA ----
 
+perf_4_test <- ordinal_metrics(model_4, D4_test)
+perf_5_test <- ordinal_metrics(model_5, D5_test)
+perf_6_test <- ordinal_metrics(model_6, D6_test)
+
+
+# COMBINE PERFORMANCE RESULTS ----
+
+performance_middle <- data.frame(
+  K = rep(c(3, 6, 10), each = 2),
+  Dataset = rep(c("Training", "Test"), 3),
+  MZE = c(
+    perf_4_train["MZE"], perf_4_test["MZE"],
+    perf_5_train["MZE"], perf_5_test["MZE"],
+    perf_6_train["MZE"], perf_6_test["MZE"]
+  ),
+  MAE = c(
+    perf_4_train["MAE"], perf_4_test["MAE"],
+    perf_5_train["MAE"], perf_5_test["MAE"],
+    perf_6_train["MAE"], perf_6_test["MAE"]
+  )
+)
+
+performance_middle
+
+
+
+# EXTREME CATEGORIES MORE FREQUENT ----
+
+# Define symmetric category probabilities
 
 # K = 3
 p0_7 <- c(0.40, 0.20, 0.40)
@@ -383,56 +426,74 @@ p0_8 <- c(0.30, 0.15, 0.05, 0.05, 0.15, 0.30)
 
 # K = 10
 p0_9 <- c(0.22, 0.14, 0.08, 0.04, 0.02,
-                   0.02, 0.04, 0.08, 0.14, 0.22)
+          0.02, 0.04, 0.08, 0.14, 0.22)
 
 
-D7 <- ordinal_data(n, K1, p, beta, p0 = p0_7, relationship, PO)
-D8 <- ordinal_data(n, K2, p, beta, p0 = p0_8, relationship, PO)
-D9 <- ordinal_data(n, K3, p, beta, p0 = p0_9, relationship, PO)
+# GENERATE TRAINING DATASETS
+
+D7_train <- ordinal_data(n_train, K1_equi, p, beta,
+                         p0_7, relationship, PO)
+
+D8_train <- ordinal_data(n_train, K2_equi, p, beta,
+                         p0_8, relationship, PO)
+
+D9_train <- ordinal_data(n_train, K3_equi, p, beta,
+                         p0_9, relationship, PO)
 
 
-# now try to fit the model 
+# GENERATE TEST DATASETS
 
-# Fit proportional odds models
+D7_test <- ordinal_data(n_test, K1_equi, p, beta,
+                        p0_7, relationship, PO)
+
+D8_test <- ordinal_data(n_test, K2_equi, p, beta,
+                        p0_8, relationship, PO)
+
+D9_test <- ordinal_data(n_test, K3_equi, p, beta,
+                        p0_9, relationship, PO)
+
+
+# FIT PROPORTIONAL ODDS MODELS ----
+
 model_7 <- polr(
   y ~ .,
-  data = D7,
+  data = D7_train,
   method = "logistic",
   Hess = TRUE
 )
 
 model_8 <- polr(
   y ~ .,
-  data = D8,
+  data = D8_train,
   method = "logistic",
   Hess = TRUE
 )
 
 model_9 <- polr(
   y ~ .,
-  data = D9,
+  data = D9_train,
   method = "logistic",
   Hess = TRUE
 )
 
 
-# Model summaries
-summary(model_7)
-summary(model_8)
-summary(model_9)
+# TRUE COEFFICIENTS
 
-# True coefficients
 beta_true <- c(0.8, 0.5)
 
-# Extract estimated coefficients
+
+# ESTIMATED COEFFICIENTS
+
 beta_est <- rbind(
   K3  = coef(model_7),
   K6  = coef(model_8),
   K10 = coef(model_9)
 )
 
-# Compare estimates with true values
-comparison <- data.frame(
+
+# COMPARISON
+
+comparison_extreme <- data.frame(
   K = c(3, 6, 10),
   beta1_est = beta_est[, 1],
   beta1_true = beta_true[1],
@@ -440,18 +501,55 @@ comparison <- data.frame(
   beta2_true = beta_true[2]
 )
 
-comparison
+comparison_extreme
 
 
-# now assess performance with MZE and MAE
+# PERFORMANCE ON TRAINING DATA ----
 
-perf_7 <- ordinal_metrics(model_7, D7)
-perf_8 <- ordinal_metrics(model_8, D8)
-perf_9 <- ordinal_metrics(model_9, D9)
+perf_7_train <- ordinal_metrics(model_7, D7_train)
+perf_8_train <- ordinal_metrics(model_8, D8_train)
+perf_9_train <- ordinal_metrics(model_9, D9_train)
 
 
-rbind(perf_1, perf_2, perf_3, perf_4, perf_5, perf_6, perf_7, perf_8, perf_9)
-# results consistent also by increasing sample size (didnt write the code but tried)
+# PERFORMANCE ON TEST DATA ----
+
+perf_7_test <- ordinal_metrics(model_7, D7_test)
+perf_8_test <- ordinal_metrics(model_8, D8_test)
+perf_9_test <- ordinal_metrics(model_9, D9_test)
+
+
+# COMBINE PERFORMANCE RESULTS ----
+
+performance_extreme <- data.frame(
+  K = rep(c(3, 6, 10), each = 2),
+  Dataset = rep(c("Training", "Test"), 3),
+  MZE = c(
+    perf_7_train["MZE"], perf_7_test["MZE"],
+    perf_8_train["MZE"], perf_8_test["MZE"],
+    perf_9_train["MZE"], perf_9_test["MZE"]
+  ),
+  MAE = c(
+    perf_7_train["MAE"], perf_7_test["MAE"],
+    perf_8_train["MAE"], perf_8_test["MAE"],
+    perf_9_train["MAE"], perf_9_test["MAE"]
+  )
+)
+
+performance_extreme
+
+
+# FINAL PERFORMANCE COMPARISON ----
+
+performance_all <- rbind(
+  performance,
+  performance_middle,
+  performance_extreme
+)
+
+performance_all
+
+
+
 
 
 
@@ -482,3 +580,13 @@ rbind(perf_1, perf_2, perf_3, perf_4, perf_5, perf_6, perf_7, perf_8, perf_9)
 
 # potential questions ####
 # do we need to compare to a model seen in class
+
+
+
+
+
+
+# NEXT POTENTIAL STEPS:
+
+# first we need to do like 1000 repetitions to compute bias and sd for the beta
+# then change the magnitude of the beta and see what happens
