@@ -1,14 +1,43 @@
 # Final-Project-Statistical-Machine-Learning
 
 questions:
-- simulation / real dataset
-- fine to generate y assuming underlying latent variable
-- parameters to change: number of classes of y, set of thresholds, magnitude of beta
+- we decided to focus on POM 
+- simulation / real dataset, what in the report?
+- fine to generate y assuming underlying latent variable and how we generated thresholds
+- parameters to change: sample size, number of classes of y, set of thresholds, magnitude of beta
+- shall compare probit or can avoid
+- in the presentation/report are we expected to explain properly the mathematical explanation of the model or directly focus on our study
 
 
 STEPS: 
 
 SIMULATION:
+
+compare:
+- multinomial
+- logit
+- probit to decide 
+- logit with splines / more complex relationships
+- logit with regularised parameters: lasso, ridge, elastic net with mixing parameter 0.5
+
+to vary potentially:
+- sample size
+- number of classes
+- set of threshold
+- number of covariates and type of relationship (useful for gams)
+- magnitude of beta (set to some to 0 to see performance regularised models)
+- how they perform in case where proportional odds fails
+
+
+assessment of performance:
+- MAE, MZE: do with k-fold cv
+- biasedness and sd of beta over 1000? repetitions
+
+
+
+
+
+
 
 
 
@@ -28,7 +57,7 @@ models:
 - multinomial
 - logit / probit
 - logit with gam
-- regularised models: k-fold to choose lambda.
+- logit with regularised parameters: k-fold to choose lambda.
 
 - to check performance in terms of MAE, MZE: k-fold (nested for regularised models)
 - useful confusion matrix 
