@@ -3,7 +3,7 @@
 questions:
 - simulation / real dataset
 - fine to generate y assuming underlying latent variable
-- parameters to change: number of classes of y, set of thresholds
+- parameters to change: number of classes of y, set of thresholds, magnitude of beta
 
 # Citazioni 
 @article{gambarota2024ordinal,
