@@ -1,3 +1,4 @@
+# SIMULATION FUNCTION ----
 # ordinal_data(): generates train/test data with an ordinal response y (1 < ... < K)
 #
 # ARGUMENTS
@@ -18,7 +19,7 @@
 #                 (ignored if relationship = "linear")
 #   np_strength   violation of proportional odds: 0 = none, 1 = strong
 #   thresholds    leave NULL or pass a previous result's $thresholds 
-#   n_ref         size of the sample used for that calibration 
+#   n_ref         size of the sample used for that calibration (leave as is)
 
 ordinal_data <- function(n_train = 1000, n_test = 0,
                          K = 5,
@@ -130,7 +131,8 @@ ordinal_data <- function(n_train = 1000, n_test = 0,
 # SCENARIOs DEFINITION ----
 
 # Baseline scenario equals this except for what is listed
-base <- list(n = 1000, K = 5, p = 2, p_noise = 0,
+# Baseline scenario equals this except for what is listed
+base <- list(n_train = 1000, n_test = 1000, K = 5, p = 2, p_noise = 0,
              beta = c(0.8, 0.5), p0 = "equi", signal = 0.3,
              relationship = "linear", rel_strength = 0.5, np_strength = 0)
 
@@ -141,9 +143,9 @@ scenarios <- list(
   nonPO_half    = modifyList(base, list(np_strength = 0.5)),
   nonPO_full    = modifyList(base, list(np_strength = 1)),
   
-  # 2. sample size
-  n_250         = modifyList(base, list(n = 250)),
-  n_4000        = modifyList(base, list(n = 4000)),
+  # 2. sample size (only the training set changes)
+  n_250         = modifyList(base, list(n_train = 250)),
+  n_4000        = modifyList(base, list(n_train = 4000)),
   
   # 3. strength of the coefficients
   signal_weak   = modifyList(base, list(signal = 0.1)),
@@ -167,13 +169,12 @@ scenarios <- list(
   noise_10      = modifyList(base, list(p_noise = 10)),
   
   # a few combinations
-  nonPO_n250    = modifyList(base, list(np_strength = 1, n = 250)),
+  nonPO_n250    = modifyList(base, list(np_strength = 1, n_train = 250)),
   K8_skewed     = modifyList(base, list(K = 8, p0 = "skewed"))
 )
 
-names(scenarios)
-length(scenarios)
-
+# names(scenarios)
+# length(scenarios)
 # Dataset drawing ----
 scen1 <- do.call(ordinal_data, scenarios$baseline)
 
