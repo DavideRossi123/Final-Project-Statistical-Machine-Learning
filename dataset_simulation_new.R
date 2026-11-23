@@ -127,4 +127,54 @@ ordinal_data <- function(n_train = 1000, n_test = 0,
        signal = signal, V = V)
 }
 
+# SCENARIOs DEFINITION ----
+
+# Baseline scenario equals this except for what is listed
+base <- list(n = 1000, K = 5, p = 2, p_noise = 0,
+             beta = c(0.8, 0.5), p0 = "equi", signal = 0.3,
+             relationship = "linear", rel_strength = 0.5, np_strength = 0)
+
+scenarios <- list(
+  baseline      = base,
+  
+  # 1. proportional vs non-proportional odds
+  nonPO_half    = modifyList(base, list(np_strength = 0.5)),
+  nonPO_full    = modifyList(base, list(np_strength = 1)),
+  
+  # 2. sample size
+  n_250         = modifyList(base, list(n = 250)),
+  n_4000        = modifyList(base, list(n = 4000)),
+  
+  # 3. strength of the coefficients
+  signal_weak   = modifyList(base, list(signal = 0.1)),
+  signal_strong = modifyList(base, list(signal = 0.5)),
+  
+  # 4. class balance
+  p0_middle     = modifyList(base, list(p0 = "middle")),
+  p0_extreme    = modifyList(base, list(p0 = "extreme")),
+  p0_skewed     = modifyList(base, list(p0 = "skewed")),
+  
+  # 5. number of categories
+  K_3           = modifyList(base, list(K = 3)),
+  K_8           = modifyList(base, list(K = 8)),
+  
+  # 6. type of relationship
+  rel_quadratic = modifyList(base, list(relationship = "quadratic")),
+  rel_interact  = modifyList(base, list(relationship = "interaction")),
+  rel_smooth    = modifyList(base, list(relationship = "smooth")),
+  
+  # extras for regularization (irrelevant covariates)
+  noise_10      = modifyList(base, list(p_noise = 10)),
+  
+  # a few combinations
+  nonPO_n250    = modifyList(base, list(np_strength = 1, n = 250)),
+  K8_skewed     = modifyList(base, list(K = 8, p0 = "skewed"))
+)
+
+names(scenarios)
+length(scenarios)
+
+# Dataset drawing ----
+scen1 <- do.call(ordinal_data, scenarios$baseline)
+
 
