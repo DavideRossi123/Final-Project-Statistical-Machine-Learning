@@ -3,7 +3,7 @@
 #
 # ARGUMENTS
 #   n_train       number of rows in the training set
-#   n_test        number of rows in the test set (0 = no test set)
+#   n_test        number of rows in the test set 
 #   K             number of ordered categories
 #   p0            how balanced the categories are: a vector of K probabilities,
 #                 or "equi" (all equal), "middle" (middle categories frequent),
@@ -21,7 +21,7 @@
 #   thresholds    leave NULL or pass a previous result's $thresholds 
 #   n_ref         size of the sample used for that calibration (leave as is)
 
-ordinal_data <- function(n_train = 1000, n_test = 0,
+ordinal_data <- function(n_train = 1000, n_test = 1000,
                          K = 5,
                          p = 2, p_noise = 0,
                          beta = rep(1, p),
@@ -132,47 +132,42 @@ ordinal_data <- function(n_train = 1000, n_test = 0,
 
 # Baseline scenario equals this except for what is listed
 # Baseline scenario equals this except for what is listed
-base <- list(n_train = 1000, n_test = 1000, K = 5, p = 2, p_noise = 0,
+base <- list(n_train = 1000, n_test = 500, K = 5, p = 2, p_noise = 0,
              beta = c(0.8, 0.5), p0 = "equi", signal = 0.3,
              relationship = "linear", rel_strength = 0.5, np_strength = 0)
 
 scenarios <- list(
   baseline      = base,
   
-  # 1. proportional vs non-proportional odds
-  nonPO_half    = modifyList(base, list(np_strength = 0.5)),
-  nonPO_full    = modifyList(base, list(np_strength = 1)),
-  
-  # 2. sample size (only the training set changes)
-  n_250         = modifyList(base, list(n_train = 250)),
-  n_4000        = modifyList(base, list(n_train = 4000)),
-  
-  # 3. strength of the coefficients
-  signal_weak   = modifyList(base, list(signal = 0.1)),
-  signal_strong = modifyList(base, list(signal = 0.5)),
-  
-  # 4. class balance
+  # 1. class balance
   p0_middle     = modifyList(base, list(p0 = "middle")),
   p0_extreme    = modifyList(base, list(p0 = "extreme")),
   p0_skewed     = modifyList(base, list(p0 = "skewed")),
   
-  # 5. number of categories
-  K_3           = modifyList(base, list(K = 3)),
-  K_6           = modifyList(base, list(K = 6)),
-  K_10          = modifyList(base, list(K = 10)),
+  # 2. strength of the coefficients
+  signal_weak   = modifyList(base, list(signal = 0.1)),
+  signal_strong = modifyList(base, list(signal = 0.5)),
   
-  # 6. type of relationship
-  rel_quadratic = modifyList(base, list(relationship = "quadratic")),
-  rel_interact  = modifyList(base, list(relationship = "interaction")),
+  # 3. type of relationship
+  # rel_quadratic = modifyList(base, list(relationship = "quadratic")),
+  # rel_interact  = modifyList(base, list(relationship = "interaction")),
   rel_smooth    = modifyList(base, list(relationship = "smooth")),
   
-  # extras for regularization (irrelevant covariates)
+  # 4. Irrelevant covariates
   noise_10      = modifyList(base, list(p_noise = 10)),
   
-  # a few combinations
-  nonPO_n250    = modifyList(base, list(np_strength = 1, n_train = 250)),
-  K8_skewed     = modifyList(base, list(K = 8, p0 = "skewed"))
+  # 5. proportional vs non-proportional odds
+  nonPO_half    = modifyList(base, list(np_strength = 0.5)),
+  nonPO_full    = modifyList(base, list(np_strength = 1)),
+  
+  # number of categories
+  # K_3           = modifyList(base, list(K = 3)),
+  # K_6           = modifyList(base, list(K = 6)),
+  # K_10          = modifyList(base, list(K = 10)),
+
 )
+
+### ADD SAME SCENARIOS BUT CHANGING SAMPLE SIZE (2 FOR EACH)!!!!!!!!!!!!!!!
 
 # names(scenarios)
 # length(scenarios)
@@ -353,3 +348,5 @@ for (m in c("MZE", "MAE", "NLL", "RPS"))                         # distance from
   tab[[paste0(m, "_gap")]] <- tab[[m]] - tab[[m]][tab$Model == "Oracle"]
 
 print(tab[order(tab$NLL), ], digits = 3, row.names = FALSE)
+
+
