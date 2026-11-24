@@ -350,3 +350,432 @@ for (m in c("MZE", "MAE", "NLL", "RPS"))                         # distance from
 print(tab[order(tab$NLL), ], digits = 3, row.names = FALSE)
 
 
+
+
+
+
+
+# FIRST SIMULATION = change category balance ####
+
+# this is using n_train = 1000, n_test = 500
+
+balances <- c("equi", "middle", "extreme", "skewed")
+
+results <- list()
+
+for (b in balances) {
+  
+  cat("Class balance:", b, "\n")
+  
+  # Generate data
+  o <- do.call(ordinal_data, modifyList(
+    base,
+    list(p0 = b)
+  ))
+  
+  train <- o$train
+  test  <- o$test
+  
+  # Fit multinomial model
+  P_multinom <- m_multinom(train, test)
+  
+  # Fit proportional odds model (logit)
+  P_pom <- m_pom("logistic")(train, test)
+  
+  # Compute performance metrics
+  metrics_multinom <- metrics_from_probs(P_multinom, test$y)
+  metrics_pom      <- metrics_from_probs(P_pom, test$y)
+  
+  # Store results
+  results[[b]] <- rbind(
+    data.frame(
+      Balance = b,
+      Model = "Multinomial",
+      t(metrics_multinom)
+    ),
+    data.frame(
+      Balance = b,
+      Model = "POM_logit",
+      t(metrics_pom)
+    )
+  )
+}
+
+# Combine results
+results_balance <- do.call(rbind, results)
+rownames(results_balance) <- NULL
+
+# Display results
+print(results_balance, digits = 3, row.names = FALSE)
+
+
+
+
+# SECOND SIMULATION = change strength of coeffs ####
+signal_values <- c(0.1, 0.3, 0.5)
+
+results <- list()
+
+for (s in signal_values) {
+  
+  cat("Signal strength:", s, "\n")
+  
+  # Generate data
+  o <- do.call(ordinal_data, modifyList(
+    base,
+    list(signal = s)
+  ))
+  
+  train <- o$train
+  test  <- o$test
+  
+  # Fit multinomial model
+  P_multinom <- m_multinom(train, test)
+  
+  # Fit proportional odds model (logit)
+  P_pom <- m_pom("logistic")(train, test)
+  
+  # Compute performance metrics
+  metrics_multinom <- metrics_from_probs(P_multinom, test$y)
+  metrics_pom      <- metrics_from_probs(P_pom, test$y)
+  
+  # Store results
+  results[[as.character(s)]] <- rbind(
+    data.frame(
+      Signal = s,
+      Model = "Multinomial",
+      t(metrics_multinom)
+    ),
+    data.frame(
+      Signal = s,
+      Model = "POM_logit",
+      t(metrics_pom)
+    )
+  )
+}
+
+# Combine results
+results_signal <- do.call(rbind, results)
+rownames(results_signal) <- NULL
+
+# Display results
+print(results_signal, digits = 3, row.names = FALSE)
+
+
+
+
+
+# THIRD SIMULATION = type of relationship ####
+
+# POM with smooth term for V1
+m_pom_smooth <- function(train, test, k = 5) {
+  
+  tr <- train
+  te <- test
+  
+  tr$y_int <- as.integer(tr$y)
+  
+  fit <- mgcv::gam(
+    y_int ~ s(V1, k = k) + V2,
+    family = mgcv::ocat(R = nlevels(train$y)),
+    data = tr,
+    method = "REML"
+  )
+  
+  predict(fit, newdata = te, type = "response")
+}
+
+
+# Multinomial model with smooth term for V1
+m_multinom_smooth <- function(train, test, k = 5) {
+  
+  tr <- train
+  te <- test
+  
+  K <- nlevels(train$y)
+  
+  tr$y_num <- as.integer(tr$y) - 1
+  
+  # One predictor for each non-reference category
+  f <- list(y_num ~ s(V1, k = k) + V2)
+  
+  for (j in 2:(K - 1)) {
+    f[[j]] <- ~ s(V1, k = k) + V2
+  }
+  
+  fit <- mgcv::gam(
+    f,
+    family = mgcv::multinom(K = K - 1),
+    data = tr,
+    method = "REML"
+  )
+  
+  predict(fit, newdata = te, type = "response")
+}
+
+
+o <- do.call(ordinal_data, modifyList(
+  base,
+  list(
+    relationship = "smooth",
+    rel_strength = 0.5
+  )
+))
+
+train <- o$train
+test  <- o$test
+
+
+# Fit the four models
+
+P_pom         <- m_pom("logistic")(train, test)
+P_pom_smooth  <- m_pom_smooth(train, test)
+P_multinom    <- m_multinom(train, test)
+P_mult_smooth <- m_multinom_smooth(train, test)
+
+
+# Compute performance metrics
+
+results_smooth <- rbind(
+  
+  data.frame(
+    Model = "POM_logit",
+    t(metrics_from_probs(P_pom, test$y))
+  ),
+  
+  data.frame(
+    Model = "POM_smooth",
+    t(metrics_from_probs(P_pom_smooth, test$y))
+  ),
+  
+  data.frame(
+    Model = "Multinomial",
+    t(metrics_from_probs(P_multinom, test$y))
+  ),
+  
+  data.frame(
+    Model = "Multinomial_smooth",
+    t(metrics_from_probs(P_mult_smooth, test$y))
+  )
+)
+
+rownames(results_smooth) <- NULL
+
+print(results_smooth, digits = 3, row.names = FALSE)
+
+
+# note that here the smooth term used is thin plate regression splines with basis dimension k = 5
+# potentially can try with other splines but outside the goal of this analysis
+# we just want to compare the difference with a model without the spline
+
+
+
+# FOURTH SIMULATION = introduce Lasso ####
+install.packages("glmnet")
+library(glmnet)
+library(ggplot2)
+
+set.seed(611)
+
+# Generate data with 10 irrelevant covariates
+o <- do.call(ordinal_data, modifyList(
+  base,
+  list(p_noise = 10)
+))
+
+train <- o$train
+test  <- o$test
+
+xs <- setdiff(names(train), "y")
+noise_vars <- paste0("N", 1:10)
+
+
+# 1. MULTINOMIAL (NO PENALISATION) 
+
+tr_multi <- train
+tr_multi$y <- factor(tr_multi$y, ordered = FALSE)
+
+fit_multi <- nnet::multinom(
+  y ~ ., data = tr_multi,
+  maxit = 1000, MaxNWts = 5000, trace = FALSE
+)
+
+P_multi <- predict(fit_multi, newdata = test, type = "probs")
+
+
+# 2. POM LOGIT (NO PENALISATION) 
+
+fit_pom <- MASS::polr(
+  y ~ ., data = train,
+  method = "logistic"
+)
+
+P_pom <- predict(fit_pom, newdata = test, type = "probs")
+
+
+# 3. MULTINOMIAL LASSO 
+
+X <- as.matrix(train[, xs])
+X_test <- as.matrix(test[, xs])
+
+y_multi <- factor(train$y, ordered = FALSE)
+
+fold_id <- make_folds(train$y, 5)$fold_id
+
+fit_multi_lasso <- glmnet::cv.glmnet(
+  x = X,
+  y = y_multi,
+  family = "multinomial",
+  alpha = 1,
+  foldid = fold_id,
+  standardize = TRUE,
+  type.multinomial = "grouped"
+)
+
+P_multi_lasso <- predict(
+  fit_multi_lasso,
+  newx = X_test,
+  s = "lambda.min",
+  type = "response"
+)[,,1]
+
+
+# 4. POM LASSO 
+
+folds <- split(seq_along(train$y), fold_id)
+
+tn <- tune_onet(
+  X, train$y, folds,
+  alpha = 1
+)
+
+idx <- tn$best_idx
+
+P_pom_lasso <- predict(
+  tn$fit_full,
+  newx = X_test,
+  whichLambda = idx,
+  type = "response"
+)
+
+
+# PERFORMANCE METRICS 
+
+results_lasso <- rbind(
+  
+  data.frame(
+    Model = "Multinomial",
+    t(metrics_from_probs(P_multi, test$y))
+  ),
+  
+  data.frame(
+    Model = "POM_logit",
+    t(metrics_from_probs(P_pom, test$y))
+  ),
+  
+  data.frame(
+    Model = "Multinomial_Lasso",
+    t(metrics_from_probs(P_multi_lasso, test$y))
+  ),
+  
+  data.frame(
+    Model = "POM_Lasso",
+    t(metrics_from_probs(P_pom_lasso, test$y))
+  )
+)
+
+rownames(results_lasso) <- NULL
+
+print(results_lasso, digits = 3, row.names = FALSE)
+
+
+# EXTRACT coeffs
+
+# Multinomial
+b_multi <- coef(fit_multi)
+
+# POM
+b_pom <- coef(fit_pom)
+
+# Multinomial Lasso
+b_multi_lasso <- coef(fit_multi_lasso, s = "lambda.min")
+b_multi_lasso <- do.call(
+  cbind,
+  lapply(b_multi_lasso, as.matrix)
+)
+
+# POM Lasso
+b_pom_lasso <- coef(
+  tn$fit_full,
+  matrix = TRUE,
+  whichLambda = idx
+)
+
+
+# Extract maximum absolute coefficient for each variable
+get_max_abs <- function(B, vars) {
+  
+  B <- as.matrix(B)
+  
+  if (all(vars %in% colnames(B))) {
+    return(apply(abs(B[, vars, drop = FALSE]), 2, max))
+  }
+  
+  if (all(vars %in% rownames(B))) {
+    return(apply(abs(B[vars, , drop = FALSE]), 1, max))
+  }
+  
+  stop("Variable names not found in coefficient matrix.")
+}
+
+
+# Combine coefficients
+coef_results <- rbind(
+  
+  data.frame(
+    Model = "Multinomial",
+    Variable = xs,
+    AbsCoef = get_max_abs(b_multi, xs)
+  ),
+  
+  data.frame(
+    Model = "POM_logit",
+    Variable = xs,
+    AbsCoef = abs(b_pom[xs])
+  ),
+  
+  data.frame(
+    Model = "Multinomial_Lasso",
+    Variable = xs,
+    AbsCoef = get_max_abs(b_multi_lasso, xs)
+  ),
+  
+  data.frame(
+    Model = "POM_Lasso",
+    Variable = xs,
+    AbsCoef = get_max_abs(b_pom_lasso, xs)
+  )
+)
+
+
+# PLOT the coeffs
+
+coef_results$Variable <- factor(
+  coef_results$Variable,
+  levels = xs
+)
+
+ggplot(coef_results, aes(x = Variable, y = AbsCoef)) +
+  geom_col() +
+  facet_wrap(~ Model, ncol = 2, scales = "free_y") +
+  labs(
+    title = "Coefficient estimates across models",
+    subtitle = "Maximum absolute coefficient across categories/cutpoints",
+    x = "Covariate",
+    y = "Absolute coefficient"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
