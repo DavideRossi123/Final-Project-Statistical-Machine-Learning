@@ -779,3 +779,315 @@ ggplot(coef_results, aes(x = Variable, y = AbsCoef)) +
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
+
+  ## subsection: consider the 1-SE rule ####
+library(glmnet)
+library(ggplot2)
+
+set.seed(611)
+
+# Generate data with 10 irrelevant covariates
+o <- do.call(ordinal_data, modifyList(
+  base,
+  list(p_noise = 10)
+))
+
+train <- o$train
+test  <- o$test
+
+xs <- setdiff(names(train), "y")
+
+# Same stratified folds for both penalised models
+fold_id <- make_folds(train$y, 5)$fold_id
+folds <- split(seq_along(train$y), fold_id)
+
+tr_multi <- train
+tr_multi$y <- factor(tr_multi$y, ordered = FALSE)
+
+fit_multi <- nnet::multinom(
+  y ~ ., data = tr_multi,
+  maxit = 1000, MaxNWts = 5000, trace = FALSE
+)
+
+P_multi <- predict(fit_multi, newdata = test, type = "probs")
+
+fit_pom <- MASS::polr(
+  y ~ ., data = train,
+  method = "logistic"
+)
+
+P_pom <- predict(fit_pom, newdata = test, type = "probs")
+
+X <- as.matrix(train[, xs])
+X_test <- as.matrix(test[, xs])
+
+y_multi <- factor(train$y, ordered = FALSE)
+
+fit_multi_lasso <- glmnet::cv.glmnet(
+  x = X,
+  y = y_multi,
+  family = "multinomial",
+  alpha = 1,
+  foldid = fold_id,
+  standardize = TRUE,
+  type.multinomial = "grouped"
+)
+
+P_multi_lasso <- predict(
+  fit_multi_lasso,
+  newx = X_test,
+  s = "lambda.1se",
+  type = "response"
+)[,,1]
+
+
+tn <- tune_onet(
+  X, train$y, folds,
+  alpha = 1
+)
+
+# Select the 1-SE lambda
+idx <- tn$idx_1se
+
+P_pom_lasso <- predict(
+  tn$fit_full,
+  newx = X_test,
+  whichLambda = idx,
+  type = "response"
+)
+
+results_lasso_1se <- rbind(
+  
+  data.frame(
+    Model = "Multinomial",
+    t(metrics_from_probs(P_multi, test$y))
+  ),
+  
+  data.frame(
+    Model = "POM_logit",
+    t(metrics_from_probs(P_pom, test$y))
+  ),
+  
+  data.frame(
+    Model = "Multinomial_Lasso_1se",
+    t(metrics_from_probs(P_multi_lasso, test$y))
+  ),
+  
+  data.frame(
+    Model = "POM_Lasso_1se",
+    t(metrics_from_probs(P_pom_lasso, test$y))
+  )
+)
+
+rownames(results_lasso_1se) <- NULL
+
+print(results_lasso_1se, digits = 3, row.names = FALSE)
+
+
+# Extract coefficients
+
+# Multinomial
+b_multi <- coef(fit_multi)
+
+# POM
+b_pom <- coef(fit_pom)
+
+# Multinomial Lasso (1-SE)
+b_multi_lasso <- coef(
+  fit_multi_lasso,
+  s = "lambda.1se"
+)
+
+b_multi_lasso <- do.call(
+  cbind,
+  lapply(b_multi_lasso, as.matrix)
+)
+
+# POM Lasso (1-SE)
+b_pom_lasso <- coef(
+  tn$fit_full,
+  matrix = TRUE,
+  whichLambda = idx
+)
+
+coef_results <- rbind(
+  
+  data.frame(
+    Model = "Multinomial",
+    Variable = xs,
+    AbsCoef = get_max_abs(b_multi, xs)
+  ),
+  
+  data.frame(
+    Model = "POM_logit",
+    Variable = xs,
+    AbsCoef = abs(b_pom[xs])
+  ),
+  
+  data.frame(
+    Model = "Multinomial_Lasso_1se",
+    Variable = xs,
+    AbsCoef = get_max_abs(b_multi_lasso, xs)
+  ),
+  
+  data.frame(
+    Model = "POM_Lasso_1se",
+    Variable = xs,
+    AbsCoef = get_max_abs(b_pom_lasso, xs)
+  )
+)
+
+coef_results$Variable <- factor(
+  coef_results$Variable,
+  levels = xs
+)
+
+ggplot(coef_results, aes(x = Variable, y = AbsCoef)) +
+  geom_col() +
+  facet_wrap(~ Model, ncol = 2, scales = "free_y") +
+  labs(
+    title = "Coefficient estimates across models",
+    subtitle = "Maximum absolute coefficient across categories/cutpoints",
+    x = "Covariate",
+    y = "Absolute coefficient"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+
+# 5: proportional odds does not hold ####
+set.seed(611)
+
+# Generate data with a violation of proportional odds
+o <- do.call(ordinal_data, modifyList(
+  base,
+  list(np_strength = 1)
+))
+
+train <- o$train
+test  <- o$test
+
+# Check the coefficients used at each cutpoint
+o$a
+
+# Check target and realised class balance
+round(rbind(
+  target = o$p0,
+  train  = as.numeric(prop.table(table(train$y))),
+  test   = as.numeric(prop.table(table(test$y)))
+), 3)
+
+
+# 1. Multinomial logistic regression
+P_multinom <- m_multinom(train, test)
+
+# 2. Proportional odds logistic regression
+P_pom <- m_pom("logistic")(train, test)
+
+
+results_nonPO <- rbind(
+  
+  data.frame(
+    Model = "Multinomial",
+    t(metrics_from_probs(P_multinom, test$y))
+  ),
+  
+  data.frame(
+    Model = "POM_logit",
+    t(metrics_from_probs(P_pom, test$y))
+  )
+)
+
+rownames(results_nonPO) <- NULL
+
+print(results_nonPO, digits = 3, row.names = FALSE)
+
+
+# now we can try to think about what to do in case of failing of the PO assumption
+# in terms of error, it looks like the multinomial model performs almost the same
+# but the multinomial does not consider the ordering
+# so we would like a model that can perform better and considers the ordering
+
+#install.packages("VGAM")
+library(VGAM)
+
+fit_nonpom <- VGAM::vglm(
+  y ~ V1 + V2,
+  family = VGAM::cumulative(
+    link = "logitlink",
+    parallel = FALSE,
+    reverse = TRUE
+  ),
+  data = train
+)
+
+
+# parallel = FALSE allows the reg coeffs to vary across cumulative logits
+
+summary(fit_nonpom)
+
+P_nonpom <- predict(
+  fit_nonpom,
+  newdata = test,
+  type = "response"
+)
+
+P_nonpom <- as.matrix(P_nonpom)
+
+# Minimum and maximum predicted probabilities
+range(P_nonpom)
+
+# Any negative probabilities?
+any(P_nonpom < 0)
+
+# Number of negative probabilities
+sum(P_nonpom < 0)
+
+# Check whether probabilities sum to one
+range(rowSums(P_nonpom))
+
+
+
+# now compare results
+P_pom <- m_pom("logistic")(train, test)
+
+P_multinom <- m_multinom(train, test)
+
+results_nonPO <- rbind(
+  
+  data.frame(
+    Model = "POM_logit",
+    t(metrics_from_probs(P_pom, test$y))
+  ),
+  
+  data.frame(
+    Model = "Multinomial",
+    t(metrics_from_probs(P_multinom, test$y))
+  ),
+  
+  data.frame(
+    Model = "NonPOM_logit",
+    t(metrics_from_probs(P_nonpom, test$y))
+  )
+)
+
+rownames(results_nonPO) <- NULL
+
+print(results_nonPO, digits = 3, row.names = FALSE)
+
+
+# doing this works, no problem of negative probabilities
+
+# however to be consistent with real-case scenario
+# prof suggestion = isotonic regression
+# this imposes a monotonicity constraint:
+# we need cumulative probabilities to be non-decreasing across response categories
+
+
+# install.packages("isotone")
+library(isotone)
+
+
